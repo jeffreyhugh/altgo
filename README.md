@@ -23,6 +23,7 @@ In `constants/tokens/EXAMPLE-CHANGEME-minecraft.go`:
      - If the account is **migrated**, you'll need to include the email address to sign in with
      - If the account is **unmigrated**, set the email address to a blank string (`""`)
      - Use the `a(ign, email, password string, migrated bool)` function.
+  1. Rename the file to `constants/tokens/minecraft.go`
     
 Then, `go run main.go`
 
@@ -60,3 +61,11 @@ TODO
   - [ ] Follow player command
   - [ ] Anti-afk jitter
   - [ ] POST to Discord webhook if account disconnects
+  
+License
+-----
+This code is licensed under Gnu GPL3, with the additional stipulation that derivatives and
+redistributions must give partial credit to the original author.
+
+This part isn't required, but if you end up using the software, I'd love to hear about your use case!
+Feel free to reach me on Discord (QueueBot#1111) or email (q@queue.bot).
