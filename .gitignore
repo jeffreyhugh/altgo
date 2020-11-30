@@ -1,0 +1,4 @@
+.idea
+.idea/*
+constants/tokens/*
+!constants/tokens/EXAMPLE-CHANGEME-*
