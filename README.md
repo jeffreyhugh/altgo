@@ -47,20 +47,41 @@ All commands are prefixed with `/` by default (changed in `constants/constants.g
   - Example: `/chat Xx_Example_xX /summon minecraft:lightning_bolt ~ ~ ~`
     - `<IGN>` : a logged-in account to chat from
     - `<message>` : a message with length \leq 256
+---
+  - `/follow <IGN> <target> <duration> <nocheck>`
+  - Example: `/follow Xx_Example_xX target69 10`
+  - Example: `/follow Xx_Example_xX target69 60 nocheck` (dangerous)
+    - `<IGN>` : a logged-in account
+    - `<target>` : player to follow
+    - `<duration>` : how long to follow in seconds
+    - `<nocheck>` : DO NOT USE! Forgo the check to make sure the account and target are in the
+    same block.
+---
+  - `/goto <IGN> <target> <nocheck>`
+  - Example: `/goto Xx_Example_xX target69`
+  - Example: `/goto Xx_Example_xX target69 nocheck` (dangerous)
+    - `<IGN>` : a logged-in account
+    - `<target>` : player to goto
+    - `<nocheck>` : DO NOT USE! Forgo the check to make sure the account and target are in the
+    same block.
     
 Known Bugs
 -----
-  - Certain servers send an MoTD on join that causes an error. This is a bug according to the library
-  developer, and may or may not get fixed.
+  - ~~Certain servers send an MoTD on join that causes an error. This is a bug according to the library
+  developer, and may or may not get fixed.~~ [Fixed according to dev](https://github.com/Tnze/go-mc/commit/67806abcdb744eebeca5f3a1d8d0107a2d5cbf46)
   - Certain servers have a proxy which redirects traffic to the "real server" (e.g. `hypixel.net --> 
   mc.hypixel.net`). This causes an error.
+  - Movement generally sucks because of the client's inability to keep track of player positions. Use
+  with extreme caution, knowing it will likely cause a slew of "moved too fast" or "moved wrongly" 
+  warnings (especially when changing altitude). 
     
 TODO
 -----
   - [X] Send chat message
-  - [ ] Follow player command
+  - [X] Follow player command
   - [ ] Anti-afk jitter
   - [ ] POST to Discord webhook if account disconnects
+  - [ ] Get UUIDs from helper instead of hardcode
   
 License
 -----
