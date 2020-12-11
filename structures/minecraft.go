@@ -2,6 +2,8 @@ package structures
 
 import (
 	mc "github.com/Tnze/go-mc/bot"
+	"github.com/Tnze/go-mc/bot/world/entity"
+	"github.com/Tnze/go-mc/yggdrasil"
 	"time"
 )
 
@@ -24,7 +26,9 @@ type MinecraftServer struct {
 
 type MinecraftLogin struct {
 	IGN, Email, Password string
-	Migrated             bool
+	Migrated, Write      bool
 	Client               *mc.Client
 	Server               MinecraftServer
+	Auth                 *yggdrasil.Access
+	Following            *entity.Entity
 }

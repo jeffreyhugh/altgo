@@ -11,12 +11,14 @@ import (
 func OnDisconnect(currentSession *structures.MinecraftLogin, msg chat.Message) error {
 	inbox, outbox := helpers.GetLoginManagerChans()
 
+	_ = currentSession.Auth.Invalidate()
+
 	// Clear session when disconnected
 	currentSession.Client = nil
 	currentSession.Server.ConnectedAt = nil
 	currentSession.Server.Hostname = ""
 	currentSession.Server.Port = 0
-	currentSession.Password = "a"
+	currentSession.Write = true
 
 	inbox <- currentSession
 	_ = <-outbox

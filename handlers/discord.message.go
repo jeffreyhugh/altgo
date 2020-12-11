@@ -25,12 +25,21 @@ func MessageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
 	}
 
 	if strings.HasPrefix(m.Content, constants.DISCORD_PREFIX) {
-		if strings.HasPrefix(m.Content, fmt.Sprintf("%sjoin", constants.DISCORD_PREFIX)) || strings.HasPrefix(m.Content, fmt.Sprintf("%sconnect", constants.DISCORD_PREFIX)){
+		if strings.HasPrefix(m.Content, fmt.Sprintf("%sjoin", constants.DISCORD_PREFIX)) ||
+			strings.HasPrefix(m.Content, fmt.Sprintf("%sconnect", constants.DISCORD_PREFIX)) ||
+			strings.HasPrefix(m.Content, fmt.Sprintf("%sc ", constants.DISCORD_PREFIX)){
 			ConnectCommand(s, m)
-		} else if strings.HasPrefix(m.Content, fmt.Sprintf("%sdisconnect", constants.DISCORD_PREFIX)) {
+		} else if strings.HasPrefix(m.Content, fmt.Sprintf("%sdisconnect", constants.DISCORD_PREFIX)) ||
+			strings.HasPrefix(m.Content, fmt.Sprintf("%sd ", constants.DISCORD_PREFIX)){
 			DisconnectCommand(s, m)
 		} else if strings.HasPrefix(m.Content, fmt.Sprintf("%schat", constants.DISCORD_PREFIX)) {
 			ChatCommand(s, m)
+		} else if strings.HasPrefix(m.Content, fmt.Sprintf("%sfollow", constants.DISCORD_PREFIX)) ||
+			strings.HasPrefix(m.Content, fmt.Sprintf("%sf ", constants.DISCORD_PREFIX)) {
+			FollowCommand(s, m)
+		} else if strings.HasPrefix(m.Content, fmt.Sprintf("%sgoto", constants.DISCORD_PREFIX)) ||
+			strings.HasPrefix(m.Content, fmt.Sprintf("%sgt ", constants.DISCORD_PREFIX)) {
+			GoToCommand(s, m)
 		}
 	}
 }

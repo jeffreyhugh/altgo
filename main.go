@@ -53,13 +53,13 @@ func manageMinecraftLoginChannels() {
 	inbox, outbox := helpers.GetLoginManagerChans()
 	for {
 		req := <-inbox
-		if req.Password == "" { // Reusing password field, empty indicates read
+		if !req.Write { // read
 			if login, ok := logins[strings.ToLower(req.IGN)]; ok {
 				outbox <- login
 			} else {
 				outbox <- nil
 			}
-		} else { // Write to temporary cache if password is not empty (could be anything though)
+		} else { // Write to temporary cache
 			logins[strings.ToLower(req.IGN)] = req
 			outbox <- nil
 		}

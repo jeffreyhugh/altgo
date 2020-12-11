@@ -3,9 +3,13 @@ package handlers
 import (
 	"fmt"
 	mc "github.com/Tnze/go-mc/bot"
+	"github.com/Tnze/go-mc/bot/world/entity"
+	"github.com/Tnze/go-mc/bot/world/entity/player"
 	"github.com/Tnze/go-mc/chat"
+	_ "github.com/Tnze/go-mc/data/entity"
 	"github.com/Tnze/go-mc/yggdrasil"
 	"github.com/bwmarrin/discordgo"
+	"github.com/qbxt/altgo/constants"
 	"github.com/qbxt/altgo/helpers"
 	"github.com/qbxt/altgo/logger"
 	"github.com/qbxt/altgo/structures"
@@ -74,15 +78,15 @@ func ConnectCommand(s *discordgo.Session, m *discordgo.MessageCreate) {
 	args := strings.Split(m.Content, " ")
 	// /join Xx_Example_xX mc.hypixel.net
 	//   0        1             2
-	if len(args) < 2 {
+	if len(args) < 3 {
 		_, _ = s.ChannelMessageSend(m.ChannelID, "No name and/or no server provided. Syntax: `/join <IGN> <server>` or `/join <IGN> <server:port>`")
 		return
 	}
 
 	inbox, outbox := helpers.GetLoginManagerChans()
 	inbox <- &structures.MinecraftLogin{
-		IGN:      args[1],
-		Password: "",
+		IGN:   args[1],
+		Write: false,
 	}
 	currentSession := <-outbox
 	if currentSession == nil { // username not found
@@ -96,8 +100,10 @@ func ConnectCommand(s *discordgo.Session, m *discordgo.MessageCreate) {
 	}
 
 	c := mc.NewClient()
+	var auth *yggdrasil.Access
+	var err error
 	if currentSession.Migrated {
-		auth, err := yggdrasil.Authenticate(currentSession.Email, currentSession.Password)
+		auth, err = yggdrasil.Authenticate(currentSession.Email, currentSession.Password)
 		if err != nil {
 			logger.Error("Could not log in", err, logrus.Fields{"username": currentSession.IGN})
 			_, _ = s.ChannelMessageSend(m.ChannelID, "Could not log in. Check the console for more details.")
@@ -106,7 +112,7 @@ func ConnectCommand(s *discordgo.Session, m *discordgo.MessageCreate) {
 		c.Auth.UUID, c.Name = auth.SelectedProfile()
 		c.AsTk = auth.AccessToken()
 	} else {
-		auth, err := yggdrasil.Authenticate(currentSession.IGN, currentSession.Password)
+		auth, err = yggdrasil.Authenticate(currentSession.IGN, currentSession.Password)
 		if err != nil {
 			logger.Error("Could not log in", err, logrus.Fields{"username": currentSession.IGN})
 			_, _ = s.ChannelMessageSend(m.ChannelID, "Could not log in. Check the console for more details.")
@@ -115,8 +121,9 @@ func ConnectCommand(s *discordgo.Session, m *discordgo.MessageCreate) {
 		c.Auth.UUID, c.Name = auth.SelectedProfile()
 		c.AsTk = auth.AccessToken()
 	}
+	currentSession.Auth = auth
 	currentSession.Client = c
-	currentSession.Password = "a"
+	currentSession.Write = true
 
 	serverArgs := strings.Split(args[2], ":")
 	hostname := serverArgs[0]
@@ -163,8 +170,8 @@ func ConnectCommand(s *discordgo.Session, m *discordgo.MessageCreate) {
 
 func DisconnectCommand(s *discordgo.Session, m *discordgo.MessageCreate) {
 	args := strings.Split(m.Content, " ")
-	// /login Xx_Example_xX
-	//    0        1
+	// /disconnect Xx_Example_xX
+	//      0            1
 	if len(args) == 1 { // did not provide IGN
 		_, _ = s.ChannelMessageSend(m.ChannelID, "No name provided. Syntax: `/disconnect <IGN>`")
 		return
@@ -173,8 +180,8 @@ func DisconnectCommand(s *discordgo.Session, m *discordgo.MessageCreate) {
 	// Get current session
 	inbox, outbox := helpers.GetLoginManagerChans()
 	inbox <- &structures.MinecraftLogin{
-		IGN:      args[1],
-		Password: "",
+		IGN:   args[1],
+		Write: false,
 	}
 	currentSession := <-outbox
 	if currentSession == nil { // username not found
@@ -187,13 +194,33 @@ func DisconnectCommand(s *discordgo.Session, m *discordgo.MessageCreate) {
 		return
 	}
 
-	_ = currentSession.Client.Disconnect()
+	if currentSession.Client != nil {
+		_ = currentSession.Client.Close()
+	}
+
+	if err := currentSession.Auth.Invalidate(); err != nil {
+		logger.Error("could not invalidate token", err, logrus.Fields{"username": currentSession.IGN})
+	}
+
+	if currentSession.Migrated {
+		if err := yggdrasil.SignOut(currentSession.Email, currentSession.Password); err != nil {
+			logger.Error("could not sign out", err, logrus.Fields{"username": currentSession.IGN})
+		}
+	} else {
+		if err := yggdrasil.SignOut(currentSession.IGN, currentSession.Password); err != nil {
+			logger.Error("could not sign out", err, logrus.Fields{"username": currentSession.IGN})
+		}
+	}
 
 	currentSession.Client = nil
 	currentSession.Server.ConnectedAt = nil
 	currentSession.Server.Hostname = ""
 	currentSession.Server.Port = 0
 
+	currentSession.Write = true
+
+	inbox <- currentSession
+	_ = <-outbox
 
 	logger.Info("disconnected", logrus.Fields{"ign": currentSession.IGN})
 	_, _ = s.ChannelMessageSend(m.ChannelID, "Disconnected from server")
@@ -215,8 +242,8 @@ func ChatCommand(s *discordgo.Session, m *discordgo.MessageCreate) {
 
 	inbox, outbox := helpers.GetLoginManagerChans()
 	inbox <- &structures.MinecraftLogin{
-		IGN:      args[1],
-		Password: "",
+		IGN:   args[1],
+		Write: false,
 	}
 	currentSession := <-outbox
 	if currentSession == nil { // username not found
@@ -239,4 +266,136 @@ func ChatCommand(s *discordgo.Session, m *discordgo.MessageCreate) {
 	_, _ = s.ChannelMessageSend(m.ChannelID, "Sent message to server")
 
 	return
+}
+
+func FollowCommand(s *discordgo.Session, m *discordgo.MessageCreate) {
+	args := strings.Split(m.Content, " ")
+	// /follow Xx_Example_xX TargetAccount69 30 nocheck
+	//    0         1               2        3     4
+	if len(args) < 4 { // did not provide IGN
+		_, _ = s.ChannelMessageSend(m.ChannelID, "No name or duration provided. Syntax: `/follow <IGN> <target> <duration_seconds>`")
+		return
+	}
+
+	followDuration, err := strconv.Atoi(args[3])
+	if err != nil {
+		logger.Error("could not atoi", err, nil)
+		_, _ = s.ChannelMessageSend(m.ChannelID, "Could not use `Atoi()`. Check the console for more details.")
+		return
+	}
+
+	// Get current session
+	inbox, outbox := helpers.GetLoginManagerChans()
+	inbox <- &structures.MinecraftLogin{
+		IGN:   args[1],
+		Write: false,
+	}
+	currentSession := <-outbox
+	if currentSession == nil { // username not found
+		_, _ = s.ChannelMessageSend(m.ChannelID, "Could not find provided username.")
+		return
+	}
+
+	if currentSession.Client == nil {
+		_, _ = s.ChannelMessageSend(m.ChannelID, fmt.Sprintf("This user is not connected to any servers. Please type `/join %s <server IP>`.", args[1]))
+		return
+	}
+
+	players := currentSession.Client.Wd.PlayerEntities()
+	foundPlayer := entity.Entity{}
+	for _, p := range players {
+		if p.UUID.String() == constants.UUID_QUEUEBOT {
+			foundPlayer = p
+		}
+	}
+
+	if foundPlayer.ID == 0 {
+		_, _ = s.ChannelMessageSend(m.ChannelID, fmt.Sprintf("Could not find %s", args[2]))
+	}
+
+	nc := false
+	if len(args) == 5 {
+		if args[4] == "nocheck" {
+			nc = true
+		}
+	}
+	if !nc && !helpers.OccupiesSameBlock(player.Pos{X: foundPlayer.X, Y: foundPlayer.Y, Z: foundPlayer.Z}, currentSession.Client.Player.Pos) {
+		_, _ = s.ChannelMessageSend(m.ChannelID, fmt.Sprintf("%s and %s are not close enough to do this.", args[1], args[2]))
+		return
+	}
+
+	currentSession.Following = &foundPlayer
+	currentSession.Write = true
+
+	inbox <- currentSession
+	_ = <-outbox
+
+	go helpers.Follow(currentSession, followDuration)
+
+	_, _ = s.ChannelMessageSend(m.ChannelID, fmt.Sprintf("%s is following %s for %d seconds", args[1], args[2], followDuration))
+	logger.Info("player follow processing", logrus.Fields{"username": currentSession.IGN})
+}
+
+func GoToCommand(s *discordgo.Session, m *discordgo.MessageCreate) {
+	args := strings.Split(m.Content, " ")
+	// /follow Xx_Example_xX TargetAccount69 nocheck
+	//    0         1               2          3
+	if len(args) < 3 { // did not provide IGN
+		_, _ = s.ChannelMessageSend(m.ChannelID, "No name or duration provided. Syntax: `/follow <IGN> <target> <duration_seconds>`")
+		return
+	}
+
+	// Get current session
+	inbox, outbox := helpers.GetLoginManagerChans()
+	inbox <- &structures.MinecraftLogin{
+		IGN:   args[1],
+		Write: false,
+	}
+	currentSession := <-outbox
+	if currentSession == nil { // username not found
+		_, _ = s.ChannelMessageSend(m.ChannelID, "Could not find provided username.")
+		return
+	}
+
+	if currentSession.Client == nil {
+		_, _ = s.ChannelMessageSend(m.ChannelID, fmt.Sprintf("This user is not connected to any servers. Please type `/join %s <server IP>`.", args[1]))
+		return
+	}
+
+	players := currentSession.Client.Wd.PlayerEntities()
+	foundPlayer := entity.Entity{}
+	for _, p := range players {
+		if p.UUID.String() == constants.UUID_QUEUEBOT {
+			foundPlayer = p
+		}
+	}
+
+	if foundPlayer.ID == 0 {
+		_, _ = s.ChannelMessageSend(m.ChannelID, fmt.Sprintf("Could not find %s", args[2]))
+	}
+
+	nc := false
+	if len(args) == 4 {
+		if args[3] == "nocheck" {
+			nc = true
+		}
+	}
+	if !nc && !helpers.OccupiesSameBlock(player.Pos{X: foundPlayer.X, Y: foundPlayer.Y, Z: foundPlayer.Z}, currentSession.Client.Player.Pos) {
+		_, _ = s.ChannelMessageSend(m.ChannelID, fmt.Sprintf("%s and %s are not close enough to do this.", args[1], args[2]))
+		return
+	}
+
+	currentSession.Following = &foundPlayer
+	currentSession.Write = true
+
+	inbox <- currentSession
+	_ = <-outbox
+
+	if err := helpers.GoTo(currentSession); err != nil {
+		logger.Error("could not goto player", err, logrus.Fields{"username": currentSession.IGN})
+		_, _ = s.ChannelMessageSend(m.ChannelID, fmt.Sprintf("Error while going to %s. Check the console for more details.", args[2]))
+	}
+
+	_, _ = s.ChannelMessageSend(m.ChannelID, fmt.Sprintf("%s went to %s", args[1], args[2]))
+	logger.Info("player follow processing", logrus.Fields{"username": currentSession.IGN})
 }
